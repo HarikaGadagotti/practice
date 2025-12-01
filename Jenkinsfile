@@ -1,56 +1,42 @@
 pipeline {
-  agent none
-  options { timestamps(); timeout(time: 15, unit: 'MINUTES') }
+    agent none
 
-  stages {
+    stages {
 
-    /* 1) WHERE AM I — run on Controller (built-in) */
-    stage('Where am I (Controller)') {
-      agent { label 'built-in' }
-      steps {
-        echo "NODE = ${env.NODE_NAME}"
-        echo "WORKSPACE = ${env.WORKSPACE}"
-      }
-    }
+        stage('Checkout on Controller') {
+            agent { label 'built-in' }
+            steps {
+                checkout scm
 
-    /* 2) BUILD & RUN — on Windows Agent (label: win) */
-    stage('Build on Windows Agent') {
-      agent { label 'win' }
-      steps {
-        bat """
-        if exist out rmdir /s /q out
-        mkdir out
-        javac -d out src\\hello\\Hello.java
-        java -cp out hello.Hello
-        echo Build_OK > artifact.txt
-        """
-      }
-    }
+                echo "Running on Controller Node"
+                echo "Workspace: ${WORKSPACE}"
 
-    /* 3) PARALLEL DEMO — Controller vs Agent at the same time */
-    stage('Parallel: Controller vs Agent') {
-      parallel {
-        stage('Controller lane') {
-          agent { label 'built-in' }
-          steps {
-            echo "PARALLEL NODE = ${env.NODE_NAME}"
-          }
+                echo "Files present:"
+                bat 'dir'
+            }
         }
-        stage('Agent lane') {
-          agent { label 'win' }
-          steps {
-            bat "echo PARALLEL NODE = %NODE_NAME%"
-          }
-        }
-      }
-    }
-  }
 
-  post {
-    always {
-      node('win'){
-      archiveArtifacts artifacts: 'artifact.txt, out/**', allowEmptyArchive: false
-      }
+        stage('Process on Windows Agent') {
+            agent { label 'win-agent-4' }
+            steps {
+                checkout scm
+
+                echo "Running on Windows Agent"
+                echo "Workspace: ${WORKSPACE}"
+
+                echo "Copying index.html to output folder"
+                bat '''
+                    if exist out rmdir /s /q out
+                    mkdir out
+                    copy index.html out\\
+                '''
+            }
+        }
     }
-  }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'out/**', fingerprint: true
+        }
+    }
 }
